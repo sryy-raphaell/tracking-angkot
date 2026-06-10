@@ -3,7 +3,6 @@
 <head>
     <title>Mode Sopir</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    
     <style>
         body { 
             font-family: sans-serif; 
@@ -32,28 +31,57 @@
         .good {
             color: #27ae60;
         }
+        button {
+            margin: 5px;
+            padding: 12px 24px;
+            font-size: 16px;
+            cursor: pointer;
+            background: #3498db;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+        button:active {
+            background: #2980b9;
+        }
+        button.pause {
+            background: #e67e22;
+        }
+        button.pause:active {
+            background: #d35400;
+        }
     </style>
 </head>
 <body>
-    <h1>Mode Sopir</h1>
+    <h1> Mode Sopir</h1>
     <p>Kendaraan: <b id="vid">...</b></p>
     
     <div class="info">
         <div>Status: <span id="status" class="accuracy">Mencari GPS...</span></div>
         <div style="margin-top: 10px;">
-            <div>Koordinat:</div>
+            <div> Koordinat:</div>
             <div id="coords" style="font-size: 0.9em; color: #666;">-</div>
         </div>
         <div style="margin-top: 10px;">
-            <div>Akurasi: <span id="accuracy" class="accuracy">-</span></div>
+            <div> Akurasi: <span id="accuracy" class="accuracy">-</span></div>
+        </div>
+        <div style="margin-top: 10px;">
+            <div> Update: <span id="timestamp">-</span></div>
         </div>
     </div>
+
+    <button onclick="refreshGPS()"> Refresh GPS</button>
+    <button onclick="toggleTracking()" id="toggleBtn" class="pause">⏸ Pause</button>
 
     <script>
         const params = new URLSearchParams(window.location.search);
         const vehicleId = params.get('id') || 'Default-ID';
         document.getElementById('vid').innerText = vehicleId;
 
+        let watchId = null;
+        let isTracking = true;
+        
         function startGPS() {
             if (!("geolocation" in navigator)) {
                 document.getElementById('status').innerText = "GPS tidak didukung!";
@@ -62,38 +90,93 @@
 
             const options = { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 };
 
-            navigator.geolocation.watchPosition(
+            watchId = navigator.geolocation.watchPosition(
                 async (position) => {
                     const lat = position.coords.latitude;
                     const lng = position.coords.longitude;
                     const accuracy = position.coords.accuracy;
+                    const timestamp = new Date(position.timestamp).toLocaleTimeString();
                     
                     document.getElementById('coords').innerHTML = `Lat: ${lat.toFixed(6)}<br>Lng: ${lng.toFixed(6)}`;
                     document.getElementById('accuracy').innerText = `±${Math.round(accuracy)} meter`;
-
+                    document.getElementById('timestamp').innerText = timestamp;
+                    
                     const statusEl = document.getElementById('status');
                     if (accuracy < 50) {
-                        statusEl.innerText = "Mengirim Lokasi...";
-                        statusEl.className = "good";
+                        statusEl.innerText = isTracking ? " Mengirim Lokasi..." : " Tracking Pause";
+                        statusEl.className = isTracking ? "good" : "";
                         
-                        // KIRIM VIA HTTP POST 
-                        await fetch('/api/update', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ vehicleId, lat, lng })
-                        });
+                        // KIRIM VIA HTTP POST hanya jika tracking aktif
+                        if (isTracking) {
+                            try {
+                                await fetch('/api/update', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ vehicleId, lat, lng })
+                                });
+                            } catch (error) {
+                                console.error('Error mengirim lokasi:', error);
+                            }
+                        }
                     } else {
-                        statusEl.innerText = "⏳ Mencari GPS yang akurat...";
+                        statusEl.innerText = "Mencari GPS yang akurat...";
                         statusEl.className = "accuracy";
                     }
                 },
                 (error) => {
-                    document.getElementById('status').innerText = "Error: " + error.message;
+                    let msg = "";
+                    switch(error.code) {
+                        case error.PERMISSION_DENIED:
+                            msg = "Izin lokasi ditolak!";
+                            break;
+                        case error.POSITION_UNAVAILABLE:
+                            msg = "Informasi lokasi tidak tersedia!";
+                            break;
+                        case error.TIMEOUT:
+                            msg = "Timeout mencari GPS!";
+                            break;
+                        default:
+                            msg = "Error GPS: " + error.message;
+                    }
+                    document.getElementById('status').innerText = msg;
+                    document.getElementById('status').className = "accuracy";
                 },
                 options
             );
         }
 
+        function refreshGPS() {
+            document.getElementById('status').innerText = "🔄 Refreshing GPS...";
+            document.getElementById('status').className = "";
+            
+            if (watchId !== null) {
+                navigator.geolocation.clearWatch(watchId);
+            }
+            
+            setTimeout(() => {
+                startGPS();
+            }, 1000);
+        }
+
+        function toggleTracking() {
+            isTracking = !isTracking;
+            const btn = document.getElementById('toggleBtn');
+            const statusEl = document.getElementById('status');
+            
+            if (isTracking) {
+                btn.innerText = "Pause";
+                btn.className = "pause";
+                statusEl.innerText = "Tracking Aktif";
+                statusEl.className = "good";
+            } else {
+                btn.innerText = "Resume";
+                btn.className = "";
+                statusEl.innerText = "Tracking Pause";
+                statusEl.className = "";
+            }
+        }
+
+        // Mulai GPS saat halaman dimuat
         startGPS();
     </script>
 </body>
