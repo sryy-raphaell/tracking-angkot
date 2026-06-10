@@ -4,51 +4,118 @@
     <title>Mode Sopir</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <script src="/socket.io/socket.io.js"></script>
-    <style> body { font-family: sans-serif; text-align: center; background: #f0f0f0; } .status { font-size: 1.2em; margin-top: 20px; } </style>
+    <style>
+        body { 
+            font-family: sans-serif; 
+            text-align: center; 
+            background: #f0f0f0;
+            padding: 20px;
+        }
+        .status { 
+            font-size: 1.2em; 
+            margin-top: 20px;
+            padding: 10px;
+            background: white;
+            border-radius: 8px;
+        }
+        .info {
+            background: white;
+            margin: 10px 0;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .accuracy {
+            color: #e74c3c;
+            font-weight: bold;
+        }
+        .good {
+            color: #27ae60;
+        }
+        button {
+            margin: 5px;
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            background: #3498db;
+            color: white;
+            border: none;
+            border-radius: 5px;
+        }
+        button:active {
+            background: #2980b9;
+        }
+    </style>
 </head>
 <body>
     <h1>🚐 Mode Sopir</h1>
     <p>Kendaraan: <b id="vid">...</b></p>
-    <div class="status" id="status">Menunggu Izin Lokasi...</div>
-    <p id="coords">Koordinat: -</p>
+    
+    <div class="info">
+        <div>Status: <span id="status" class="accuracy">Mencari GPS...</span></div>
+        <div style="margin-top: 10px;">
+            <div>📍 Koordinat:</div>
+            <div id="coords" style="font-size: 0.9em; color: #666;">-</div>
+        </div>
+        <div style="margin-top: 10px;">
+            <div>🎯 Akurasi: <span id="accuracy" class="accuracy">-</span></div>
+        </div>
+        <div style="margin-top: 10px;">
+            <div>🕐 Update: <span id="timestamp">-</span></div>
+        </div>
+    </div>
 
-    <script>
-        const params = new URLSearchParams(window.location.search);
-        const vehicleId = params.get('id') || 'Default-ID';
-        document.getElementById('vid').innerText = vehicleId;
+    <button onclick="refreshGPS()">🔄 Refresh GPS</button>
+    <button onclick="toggleTracking()" id="toggleBtn">⏸️ Pause</button>
 
-        const socket = io();
-        
-        // Gabung ke room berdasarkan ID Kendaraan
-        socket.on('connect', () => {
-            socket.emit('joinRoom', vehicleId);
-            document.getElementById('status').innerText = "Terhubung. Mengirim lokasi...";
-        });
+<script>
+    const params = new URLSearchParams(window.location.search);
+    const vehicleId = params.get('id') || 'Default-ID';
+    document.getElementById('vid').innerText = vehicleId;
 
-        // Cek dukungan Geolocation
-        if ("geolocation" in navigator) {
-            // watchPosition akan update otomatis saat HP bergerak
-            navigator.geolocation.watchPosition((position) => {
+    let watchId = null;
+
+    function startGPS() {
+        if (!("geolocation" in navigator)) {
+            document.getElementById('status').innerText = "GPS tidak didukung!";
+            return;
+        }
+
+        const options = { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 };
+
+        watchId = navigator.geolocation.watchPosition(
+            async (position) => {
                 const lat = position.coords.latitude;
                 const lng = position.coords.longitude;
+                const accuracy = position.coords.accuracy;
                 
-                document.getElementById('coords').innerText = `Lat: ${lat}, Lng: ${lng}`;
-                
-                // Kirim ke server
-                socket.emit('updateLocation', {
-                    vehicleId: vehicleId,
-                    lat: lat,
-                    lng: lng
-                });
-            }, (error) => {
+                document.getElementById('coords').innerHTML = `Lat: ${lat.toFixed(6)}<br>Lng: ${lng.toFixed(6)}`;
+                document.getElementById('accuracy').innerText = `±${Math.round(accuracy)} meter`;
+
+                const statusEl = document.getElementById('status');
+                if (accuracy < 50) {
+                    statusEl.innerText = "✅ Mengirim Lokasi...";
+                    statusEl.className = "good";
+                    
+                    // KIRIM VIA HTTP POST (Bukan Socket.io)
+                    await fetch('/api/update', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ vehicleId, lat, lng })
+                    });
+                } else {
+                    statusEl.innerText = "⏳ Mencari GPS yang akurat...";
+                    statusEl.className = "accuracy";
+                }
+            },
+            (error) => {
                 document.getElementById('status').innerText = "Error: " + error.message;
-            }, {
-                enableHighAccuracy: true,
-                maximumAge: 10000 // Update maksimal setiap 10 detik untuk hemat baterai
-            });
-        } else {
-            document.getElementById('status').innerText = "GPS tidak didukung di HP ini.";
-        }
-    </script>
+            },
+            options
+        );
+    }
+
+    startGPS();
+</script>
 </body>
 </html>
