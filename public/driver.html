@@ -3,7 +3,7 @@
 <head>
     <title>Mode Sopir</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <script src="/socket.io/socket.io.js"></script>
+    
     <style>
         body { 
             font-family: sans-serif; 
@@ -32,90 +32,69 @@
         .good {
             color: #27ae60;
         }
-        button {
-            margin: 5px;
-            padding: 10px 20px;
-            font-size: 16px;
-            cursor: pointer;
-            background: #3498db;
-            color: white;
-            border: none;
-            border-radius: 5px;
-        }
-        button:active {
-            background: #2980b9;
-        }
     </style>
 </head>
 <body>
-    <h1>🚐 Mode Sopir</h1>
+    <h1>Mode Sopir</h1>
     <p>Kendaraan: <b id="vid">...</b></p>
     
     <div class="info">
         <div>Status: <span id="status" class="accuracy">Mencari GPS...</span></div>
         <div style="margin-top: 10px;">
-            <div>📍 Koordinat:</div>
+            <div>Koordinat:</div>
             <div id="coords" style="font-size: 0.9em; color: #666;">-</div>
         </div>
         <div style="margin-top: 10px;">
-            <div>🎯 Akurasi: <span id="accuracy" class="accuracy">-</span></div>
-        </div>
-        <div style="margin-top: 10px;">
-            <div>🕐 Update: <span id="timestamp">-</span></div>
+            <div>Akurasi: <span id="accuracy" class="accuracy">-</span></div>
         </div>
     </div>
 
-    <button onclick="refreshGPS()">🔄 Refresh GPS</button>
-    <button onclick="toggleTracking()" id="toggleBtn">⏸️ Pause</button>
+    <script>
+        const params = new URLSearchParams(window.location.search);
+        const vehicleId = params.get('id') || 'Default-ID';
+        document.getElementById('vid').innerText = vehicleId;
 
-<script>
-    const params = new URLSearchParams(window.location.search);
-    const vehicleId = params.get('id') || 'Default-ID';
-    document.getElementById('vid').innerText = vehicleId;
+        function startGPS() {
+            if (!("geolocation" in navigator)) {
+                document.getElementById('status').innerText = "GPS tidak didukung!";
+                return;
+            }
 
-    let watchId = null;
+            const options = { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 };
 
-    function startGPS() {
-        if (!("geolocation" in navigator)) {
-            document.getElementById('status').innerText = "GPS tidak didukung!";
-            return;
+            navigator.geolocation.watchPosition(
+                async (position) => {
+                    const lat = position.coords.latitude;
+                    const lng = position.coords.longitude;
+                    const accuracy = position.coords.accuracy;
+                    
+                    document.getElementById('coords').innerHTML = `Lat: ${lat.toFixed(6)}<br>Lng: ${lng.toFixed(6)}`;
+                    document.getElementById('accuracy').innerText = `±${Math.round(accuracy)} meter`;
+
+                    const statusEl = document.getElementById('status');
+                    if (accuracy < 50) {
+                        statusEl.innerText = "Mengirim Lokasi...";
+                        statusEl.className = "good";
+                        
+                        // KIRIM VIA HTTP POST 
+                        await fetch('/api/update', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ vehicleId, lat, lng })
+                        });
+                    } else {
+                        statusEl.innerText = "⏳ Mencari GPS yang akurat...";
+                        statusEl.className = "accuracy";
+                    }
+                },
+                (error) => {
+                    document.getElementById('status').innerText = "Error: " + error.message;
+                },
+                options
+            );
         }
 
-        const options = { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 };
-
-        watchId = navigator.geolocation.watchPosition(
-            async (position) => {
-                const lat = position.coords.latitude;
-                const lng = position.coords.longitude;
-                const accuracy = position.coords.accuracy;
-                
-                document.getElementById('coords').innerHTML = `Lat: ${lat.toFixed(6)}<br>Lng: ${lng.toFixed(6)}`;
-                document.getElementById('accuracy').innerText = `±${Math.round(accuracy)} meter`;
-
-                const statusEl = document.getElementById('status');
-                if (accuracy < 50) {
-                    statusEl.innerText = "✅ Mengirim Lokasi...";
-                    statusEl.className = "good";
-                    
-                    // KIRIM VIA HTTP POST (Bukan Socket.io)
-                    await fetch('/api/update', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ vehicleId, lat, lng })
-                    });
-                } else {
-                    statusEl.innerText = "⏳ Mencari GPS yang akurat...";
-                    statusEl.className = "accuracy";
-                }
-            },
-            (error) => {
-                document.getElementById('status').innerText = "Error: " + error.message;
-            },
-            options
-        );
-    }
-
-    startGPS();
-</script>
+        startGPS();
+    </script>
 </body>
 </html>

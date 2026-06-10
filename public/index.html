@@ -17,7 +17,6 @@
             const id = document.getElementById('vehicleId').value;
             const baseUrl = window.location.origin;
             
-            // URL untuk Sopir dan Penumpang
             const driverUrl = `${baseUrl}/driver.html?id=${id}`;
             const trackUrl = `${baseUrl}/track.html?id=${id}`;
 
@@ -29,7 +28,7 @@
                     <p><small>Link: ${driverUrl}</small></p>
                 </div>
                 <div class="qr-box">
-                    <h3>QR Penumpang (Tempel di Angkot)</h3>
+                    <h3>QR Penumpang (Tempel di Angkot/halte)</h3>
                     <img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(trackUrl)}" alt="QR Track">
                     <p><small>Link: ${trackUrl}</small></p>
                 </div>
